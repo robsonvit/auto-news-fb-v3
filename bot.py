@@ -210,6 +210,9 @@ def gerar_gancho(title):
             elif r.status_code == 429:
                 log.warning(f"⚠️ Rate limit do Gemini (429). Tentativa {attempt+1}/3. Aguardando...")
                 time.sleep(10)
+            elif r.status_code >= 500:
+                log.warning(f"⚠️ Erro no servidor do Gemini (Status {r.status_code}): {r.text}. Tentativa {attempt+1}/3. Aguardando...")
+                time.sleep(10)
             else:
                 log.warning(f"⚠️ Erro do Gemini (Status {r.status_code}): {r.text}")
                 break
