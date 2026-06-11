@@ -60,3 +60,6 @@ jobs:
             git push origin master
             echo "✅ Estado e links_noticias.json enviados para o GitHub!"
           fi
+
+# Retrigger parsing
+
