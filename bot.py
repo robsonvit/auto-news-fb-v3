@@ -356,192 +356,193 @@ def publicar_imagem(page_id, token, img_path, message):
         return None
 
 def adicionar_texto_premium(img_bytes, dados_esteticos):
-    # dados_esteticos = {"hook", "tag", "color", "emoji", "reactions", "category"}
     MAIN_COLOR = dados_esteticos["color"]
     texto = dados_esteticos["hook"]
     tag_texto = dados_esteticos["tag"]
     emoji_hex = dados_esteticos["emoji"]
-    reactions = dados_esteticos.get("reactions", [])
 
-    img = Image.open(BytesIO(img_bytes)).convert("RGB")
-    w, h = img.size
-
-    # --- CONFIGURAÇÃO SUPERSAMPLING (2x para 1080x1080 interno) ---
-    sf = 2
-    base_side = 1080
-    bw = bh = base_side * sf
-
-    # 1. Crop quadrado da imagem original
-    side = min(w, h)
-    left = (w - side) / 2
-    top = (h - side) / 2
-    img_sq = img.crop((left, top, left + side, top + side))
-    
-    # 2. Redimensionamento e Melhoria da imagem base (1:1)
-    img_core = img_sq.resize((bw, bh), Image.Resampling.LANCZOS)
-    img_core = ImageEnhance.Color(img_core).enhance(1.3)
-    img_core = ImageEnhance.Contrast(img_core).enhance(1.1)
-    img_core = ImageEnhance.Sharpness(img_core).enhance(1.4)
-
-    # 3. Gradiente de base (escurecer parte inferior para leitura do título)
-    overlay = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
-    draw_ov = ImageDraw.Draw(overlay)
-    grad_h = int(bh * 0.50)
-    for y in range(bh - grad_h, bh):
-        alpha = int(240 * ((y - (bh - grad_h)) / grad_h))
-        draw_ov.line([(0, y), (bw, y)], fill=(0, 0, 0, max(0, min(255, alpha))))
-    overlay = overlay.filter(ImageFilter.GaussianBlur(radius=5 * sf))
-    img_core = Image.alpha_composite(img_core.convert("RGBA"), overlay)
-    
-    draw_core = ImageDraw.Draw(img_core)
+    img_orig = Image.open(BytesIO(img_bytes)).convert("RGB")
+    w_orig, h_orig = img_orig.size
     font_path = baixar_fonte()
 
-    # 4. Selo de Categoria (Topo)
-    badge_h = int(bh * 0.05)
-    f_badge = ImageFont.truetype(font_path, int(badge_h * 0.75)) if font_path else ImageFont.load_default()
-    bbox_b = draw_core.textbbox((0, 0), tag_texto, font=f_badge)
-    badge_w = (bbox_b[2] - bbox_b[0]) + (40 * sf)
-    bx1, by1 = 30 * sf, 40 * sf
-    bx2, by2 = bx1 + badge_w, by1 + badge_h
-    draw_core.rectangle([bx1, by1, bx2, by2], fill=MAIN_COLOR)
-    draw_core.text(((bx1 + bx2) // 2, (by1 + by2) // 2), tag_texto, font=f_badge, fill=(255, 255, 255), anchor="mm")
+    def build_ui(target_ratio):
+        sf = 2
+        base_w = 1080
+        base_h = int(1080 / target_ratio)
+        bw, bh = base_w * sf, base_h * sf
 
-    # 5. Título (HOOK) — posicionado na parte inferior do 1:1
-    texto_puro = limpar_emojis(texto)
-    f_size = int(bh * 0.10)
-    font = ImageFont.truetype(font_path, f_size) if font_path else ImageFont.load_default()
+        # 1. Crop quadrado da imagem original
+        img_ratio = w_orig / h_orig
+        if img_ratio > target_ratio:
+            new_w = h_orig * target_ratio
+            new_h = h_orig
+        else:
+            new_w = w_orig
+            new_h = w_orig / target_ratio
 
-    l = texto_puro.strip()
-    bb = draw_core.textbbox((0, 0), l, font=font)
-    lw, lh = bb[2] - bb[0], bb[3] - bb[1]
+        left = (w_orig - new_w) / 2
+        top = (h_orig - new_h) / 2
+        img_cropped = img_orig.crop((left, top, left + new_w, top + new_h))
+        
+        # 2. Redimensionamento e Melhoria da imagem base
+        img_core = img_cropped.resize((int(bw), int(bh)), Image.Resampling.LANCZOS)
+        img_core = ImageEnhance.Color(img_core).enhance(1.3)
+        img_core = ImageEnhance.Contrast(img_core).enhance(1.1)
+        img_core = ImageEnhance.Sharpness(img_core).enhance(1.4)
 
-    if lw > (bw - 100 * sf):
-        f_size = int(f_size * (bw - 100 * sf) / lw)
+        # 3. Gradiente de base (escurecer parte inferior para leitura do título)
+        overlay = Image.new("RGBA", (int(bw), int(bh)), (0, 0, 0, 0))
+        draw_ov = ImageDraw.Draw(overlay)
+        grad_h = int(bh * 0.50)
+        for y in range(int(bh) - grad_h, int(bh)):
+            alpha = int(240 * ((y - (bh - grad_h)) / grad_h))
+            draw_ov.line([(0, y), (int(bw), y)], fill=(0, 0, 0, max(0, min(255, alpha))))
+        overlay = overlay.filter(ImageFilter.GaussianBlur(radius=5 * sf))
+        img_core = Image.alpha_composite(img_core.convert("RGBA"), overlay)
+        
+        draw_core = ImageDraw.Draw(img_core)
+
+        # 4. Selo de Categoria (Topo)
+        badge_h = int(bw * 0.05)
+        f_badge = ImageFont.truetype(font_path, int(badge_h * 0.75)) if font_path else ImageFont.load_default()
+        bbox_b = draw_core.textbbox((0, 0), tag_texto, font=f_badge)
+        badge_w = (bbox_b[2] - bbox_b[0]) + (40 * sf)
+        bx1, by1 = 30 * sf, 40 * sf
+        bx2, by2 = bx1 + badge_w, by1 + badge_h
+        draw_core.rectangle([bx1, by1, bx2, by2], fill=MAIN_COLOR)
+        draw_core.text(((bx1 + bx2) // 2, (by1 + by2) // 2), tag_texto, font=f_badge, fill=(255, 255, 255), anchor="mm")
+
+        # 5. Título (HOOK) — posicionado na parte inferior
+        texto_puro = limpar_emojis(texto)
+        f_size = int(bw * 0.10)
         font = ImageFont.truetype(font_path, f_size) if font_path else ImageFont.load_default()
+
+        l = texto_puro.strip()
         bb = draw_core.textbbox((0, 0), l, font=font)
         lw, lh = bb[2] - bb[0], bb[3] - bb[1]
 
-    tx = (bw - lw) // 2
-    padding = 35 * sf
-    ty = int(bh * 0.85) - lh # Posicionado no terço inferior do quadrado
+        if lw > (bw - 100 * sf):
+            f_size = int(f_size * (bw - 100 * sf) / lw)
+            font = ImageFont.truetype(font_path, f_size) if font_path else ImageFont.load_default()
+            bb = draw_core.textbbox((0, 0), l, font=font)
+            lw, lh = bb[2] - bb[0], bb[3] - bb[1]
 
-    # Fundo do Título (Box)
-    tx1, ty1 = tx - padding, ty - padding
-    tx2, ty2 = tx + lw + padding, ty + lh + padding
-    temp_box = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
-    ImageDraw.Draw(temp_box).rectangle([tx1, ty1, tx2, ty2], fill=MAIN_COLOR)
-    img_core = Image.alpha_composite(img_core, temp_box)
+        tx = (bw - lw) // 2
+        padding = 35 * sf
+        ty = int(bh * 0.85) - lh # Posicionado no terço inferior
 
-    # SOMBRA DO TÍTULO
-    cx, cy = (tx1 + tx2) // 2, (ty1 + ty2) // 2
-    shadow_layer = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(shadow_layer)
-    s_draw.text((cx + 4 * sf, cy + 4 * sf), l, font=font, fill=(0, 0, 0, 200), anchor="mm")
-    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=3 * sf))
-    img_core = Image.alpha_composite(img_core, shadow_layer)
+        # Fundo do Título (Box)
+        tx1, ty1 = tx - padding, ty - padding
+        tx2, ty2 = tx + lw + padding, ty + lh + padding
+        temp_box = Image.new("RGBA", (int(bw), int(bh)), (0, 0, 0, 0))
+        ImageDraw.Draw(temp_box).rectangle([tx1, ty1, tx2, ty2], fill=MAIN_COLOR)
+        img_core = Image.alpha_composite(img_core, temp_box)
 
-    # Texto do Título
-    draw_core = ImageDraw.Draw(img_core)
-    draw_core.text((cx, cy), l, font=font, fill=(255, 255, 255), anchor="mm")
+        # SOMBRA DO TÍTULO
+        cx, cy = (tx1 + tx2) // 2, (ty1 + ty2) // 2
+        shadow_layer = Image.new("RGBA", (int(bw), int(bh)), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(shadow_layer)
+        s_draw.text((cx + 4 * sf, cy + 4 * sf), l, font=font, fill=(0, 0, 0, 200), anchor="mm")
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=3 * sf))
+        img_core = Image.alpha_composite(img_core, shadow_layer)
 
-    # 6. Ícone Principal (acima do título)
-    try:
-        emoji_url = f"https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/{emoji_hex}.png"
-        r_emoji = requests.get(emoji_url, timeout=10)
-        if r_emoji.status_code == 200:
-            e_img = Image.open(BytesIO(r_emoji.content)).convert("RGBA")
-            e_size = int(f_size * 1.5)
-            e_img = e_img.resize((e_size, e_size), Image.Resampling.LANCZOS)
-            ix, iy = (bw - e_size) // 2, ty1 - e_size - (2 * sf)
-            
-            # Sombra do Ícone Principal
-            e_shadow = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
-            ImageDraw.Draw(e_shadow).ellipse(
-                [ix + 6*sf, iy + 6*sf, ix + e_size + 6*sf, iy + e_size + 6*sf],
-                fill=(0, 0, 0, 150)
-            )
-            e_shadow = e_shadow.filter(ImageFilter.GaussianBlur(radius=6*sf))
-            img_core = Image.alpha_composite(img_core, e_shadow)
-            
-            img_core.paste(e_img, (ix, iy), e_img)
-    except: pass
+        # Texto do Título
+        draw_core = ImageDraw.Draw(img_core)
+        draw_core.text((cx, cy), l, font=font, fill=(255, 255, 255), anchor="mm")
 
-    # 7. Chamada para Ação (Call to Action - Legenda)
-    cta_y = ty2 + int(60 * sf)
-    f_cta_size = int(badge_h * 0.65)
-    f_cta = ImageFont.truetype(font_path, f_cta_size) if font_path else ImageFont.load_default()
-    
-    cta_text = "VEJA MAIS NA LEGENDA"
-    emoji_hex = "1f447" # 👇
-    
-    draw_core = ImageDraw.Draw(img_core)
-    lbb = draw_core.textbbox((0, 0), cta_text, font=f_cta)
-    lw_text = lbb[2] - lbb[0]
-    
-    r_emoji_size = int(f_cta_size * 1.3)
-    espacinho = int(15 * sf)
-    
-    total_w = r_emoji_size + espacinho + lw_text + espacinho + r_emoji_size
-    rx = (bw - total_w) // 2
-    
-    try:
-        r_url = f"https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/{emoji_hex}.png"
-        r_resp = requests.get(r_url, timeout=10)
+        # 6. Ícone Principal (acima do título)
+        try:
+            emoji_url = f"https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/{emoji_hex}.png"
+            r_emoji = requests.get(emoji_url, timeout=10)
+            if r_emoji.status_code == 200:
+                e_img = Image.open(BytesIO(r_emoji.content)).convert("RGBA")
+                e_size = int(f_size * 1.5)
+                e_img = e_img.resize((e_size, e_size), Image.Resampling.LANCZOS)
+                ix, iy = (bw - e_size) // 2, ty1 - e_size - (2 * sf)
+                
+                # Sombra do Ícone Principal
+                e_shadow = Image.new("RGBA", (int(bw), int(bh)), (0, 0, 0, 0))
+                ImageDraw.Draw(e_shadow).ellipse(
+                    [ix + 6*sf, iy + 6*sf, ix + e_size + 6*sf, iy + e_size + 6*sf],
+                    fill=(0, 0, 0, 150)
+                )
+                e_shadow = e_shadow.filter(ImageFilter.GaussianBlur(radius=6*sf))
+                img_core = Image.alpha_composite(img_core, e_shadow)
+                
+                img_core.paste(e_img, (int(ix), int(iy)), e_img)
+        except: pass
+
+        # 7. Chamada para Ação (Call to Action - Legenda)
+        cta_y = ty2 + int(60 * sf)
+        f_cta_size = int(badge_h * 0.65)
+        f_cta = ImageFont.truetype(font_path, f_cta_size) if font_path else ImageFont.load_default()
         
-        if r_resp.status_code == 200:
-            ri = Image.open(BytesIO(r_resp.content)).convert("RGBA")
-            ri = ri.resize((r_emoji_size, r_emoji_size), Image.Resampling.LANCZOS)
+        cta_text = "VEJA MAIS NA LEGENDA"
+        emoji_hex_cta = "1f447" # 👇
+        
+        draw_core = ImageDraw.Draw(img_core)
+        lbb = draw_core.textbbox((0, 0), cta_text, font=f_cta)
+        lw_text = lbb[2] - lbb[0]
+        
+        r_emoji_size = int(f_cta_size * 1.3)
+        espacinho = int(15 * sf)
+        
+        total_w = r_emoji_size + espacinho + lw_text + espacinho + r_emoji_size
+        rx = (bw - total_w) // 2
+        
+        try:
+            r_url = f"https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/{emoji_hex_cta}.png"
+            r_resp = requests.get(r_url, timeout=10)
             
-            # Emoji Esquerdo
-            img_core.paste(ri, (rx, cta_y - (r_emoji_size // 4)), ri)
-            
-            # Texto Central
-            tx_pos = rx + r_emoji_size + espacinho
-            ty_pos = cta_y + (r_emoji_size // 4)
-            draw_core.text((tx_pos + 2*sf, ty_pos + 2*sf), cta_text, font=f_cta, fill=(0, 0, 0, 180), anchor="lm")
-            draw_core.text((tx_pos, ty_pos), cta_text, font=f_cta, fill=(255, 255, 255), anchor="lm")
-            
-            # Emoji Direito
-            rx_right = tx_pos + lw_text + espacinho
-            img_core.paste(ri, (rx_right, cta_y - (r_emoji_size // 4)), ri)
-        else:
-            # Fallback sem imagem
+            if r_resp.status_code == 200:
+                ri = Image.open(BytesIO(r_resp.content)).convert("RGBA")
+                ri = ri.resize((r_emoji_size, r_emoji_size), Image.Resampling.LANCZOS)
+                
+                # Emoji Esquerdo
+                img_core.paste(ri, (int(rx), int(cta_y - (r_emoji_size // 4))), ri)
+                
+                # Texto Central
+                tx_pos = rx + r_emoji_size + espacinho
+                ty_pos = cta_y + (r_emoji_size // 4)
+                draw_core.text((tx_pos + 2*sf, ty_pos + 2*sf), cta_text, font=f_cta, fill=(0, 0, 0, 180), anchor="lm")
+                draw_core.text((tx_pos, ty_pos), cta_text, font=f_cta, fill=(255, 255, 255), anchor="lm")
+                
+                # Emoji Direito
+                rx_right = tx_pos + lw_text + espacinho
+                img_core.paste(ri, (int(rx_right), int(cta_y - (r_emoji_size // 4))), ri)
+            else:
+                # Fallback sem imagem
+                draw_core.text((bw // 2 + 2*sf, cta_y + 2*sf), f"👇 {cta_text} 👇", font=f_cta, fill=(0, 0, 0, 180), anchor="mt")
+                draw_core.text((bw // 2, cta_y), f"👇 {cta_text} 👇", font=f_cta, fill=(255, 255, 255), anchor="mt")
+        except:
             draw_core.text((bw // 2 + 2*sf, cta_y + 2*sf), f"👇 {cta_text} 👇", font=f_cta, fill=(0, 0, 0, 180), anchor="mt")
             draw_core.text((bw // 2, cta_y), f"👇 {cta_text} 👇", font=f_cta, fill=(255, 255, 255), anchor="mt")
-    except:
-        draw_core.text((bw // 2 + 2*sf, cta_y + 2*sf), f"👇 {cta_text} 👇", font=f_cta, fill=(0, 0, 0, 180), anchor="mt")
-        draw_core.text((bw // 2, cta_y), f"👇 {cta_text} 👇", font=f_cta, fill=(255, 255, 255), anchor="mt")
 
-    # --- ETAPA FINAL: COMPOSIÇÃO COM FUNDO BLURRED 9:16 ---
-    # Saída em 2160x3840 (2x da resolução final 1080x1920) para o Ken Burns não perder nitidez
-    # O FFmpeg fará o downscale final para 1080x1920 após o zoompan
-    target_w, target_h = 2160, 3840   # 2x — fonte rica para o zoom do FFmpeg
-    tw_sf, th_sf = target_w, target_h
+        return img_core
 
-    # Criar fundo: Redimensionar o quadrado para preencher o 9:16 (aspect fill)
+    # A) IMAGEM REEL (Centro 1:1 + Blur 9:16)
+    img_core_1_1 = build_ui(1.0)
+    sf = 2
+    tw_sf, th_sf = 2160, 3840
     bg_size = th_sf
-    background = img_core.resize((bg_size, bg_size), Image.Resampling.LANCZOS)
-
-    # Cortar o centro para ficar tw_sf x th_sf
+    background = img_core_1_1.resize((bg_size, bg_size), Image.Resampling.LANCZOS)
     left = (bg_size - tw_sf) // 2
     background = background.crop((left, 0, left + tw_sf, th_sf))
-
-    # Aplicar Blur e escurecer para que o conteúdo original ganhe destaque
     background = background.filter(ImageFilter.GaussianBlur(radius=20 * sf))
     background = ImageEnhance.Brightness(background).enhance(0.55)
-
     canvas_916 = background
-
-    # Colar o conteúdo nítido e original no centro vertical (escalar o img_core para tw_sf x tw_sf)
-    img_core_scaled = img_core.resize((tw_sf, tw_sf), Image.Resampling.LANCZOS)
+    img_core_scaled = img_core_1_1.resize((tw_sf, tw_sf), Image.Resampling.LANCZOS)
     y_offset = (th_sf - tw_sf) // 2
     canvas_916.paste(img_core_scaled.convert("RGBA"), (0, y_offset), img_core_scaled.convert("RGBA"))
+    out_reel = BytesIO()
+    canvas_916.convert("RGB").save(out_reel, format="JPEG", quality=98)
 
-    # Finalização — salvar em alta resolução para o FFmpeg
-    final_img = canvas_916.convert("RGB")
-    out = BytesIO()
-    final_img.save(out, format="JPEG", quality=98)
-    return out.getvalue()
+    # B) IMAGEM POST (4:5 puro)
+    img_core_4_5 = build_ui(0.8) # 4:5 é width/height = 4/5 = 0.8
+    out_post = BytesIO()
+    img_core_4_5.convert("RGB").save(out_post, format="JPEG", quality=98)
+
+    return out_reel.getvalue(), out_post.getvalue()
 
 def _selecionar_link_correto(links_info: list) -> str:
     """
@@ -750,12 +751,17 @@ def main():
                 continue
             
             estetica = gerar_gancho(n["title"])
-            img_b = adicionar_texto_premium(img_data, estetica)
+            img_reel_b, img_post_b = adicionar_texto_premium(img_data, estetica)
             
-            # Salvar imagem temporária para o FFmpeg
-            temp_img = "temp_post.jpg"
-            with open(temp_img, "wb") as f:
-                f.write(img_b)
+            # Salvar imagem temporária para o FFmpeg (Reel)
+            temp_reel_img = "temp_reel_base.jpg"
+            with open(temp_reel_img, "wb") as f:
+                f.write(img_reel_b)
+
+            # Salvar imagem temporária para o Post de Foto
+            temp_post_img = "temp_post.jpg"
+            with open(temp_post_img, "wb") as f:
+                f.write(img_post_b)
             
             # Selecionar áudio aleatório
             audio_files = glob.glob("AUDIOS NEWS/*.mp3")
@@ -768,7 +774,7 @@ def main():
             # Facebook exige entre 15 e 90s; usamos 20-45s para garantir qualidade
             duracao_random = random.randint(20, 45)
             
-            if not gerar_video_ffmpeg(temp_img, audio_sel, temp_video, duration=duracao_random):
+            if not gerar_video_ffmpeg(temp_reel_img, audio_sel, temp_video, duration=duracao_random):
                 continue
             
             hashtags = estetica.get("hashtags", "#noticias #brasil").lower()
@@ -792,7 +798,7 @@ def main():
                 log.info(f"🔗 LINK REEL: https://www.facebook.com/reels/{video_id}/")
                 
                 # --- NOVO: Postar a imagem logo após o Reel ---
-                img_post_id = publicar_imagem(FB_PAGE_ID, FB_TOKEN, temp_img, msg)
+                img_post_id = publicar_imagem(FB_PAGE_ID, FB_TOKEN, temp_post_img, msg)
                 if img_post_id:
                     # O ID retornado geralmente é PostID ou PhotoID. Apenas reportamos sucesso.
                     log.info(f"📸 Sucesso! A imagem também foi postada.")
