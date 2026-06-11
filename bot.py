@@ -812,7 +812,7 @@ def main():
                 save_state(posted_ids, posted_titles)
                 
                 # Limpeza
-                for f in [temp_img, temp_video]:
+                for f in [temp_reel_img, temp_post_img, temp_video]:
                     if os.path.exists(f): os.remove(f)
                 break
             else:
@@ -821,8 +821,8 @@ def main():
                 # Tentar identificar se o erro foi de TOKEN expirado (OAuthException 190)
                 # O erro costuma vir no log do publicar_reel ou no traceback.
                 # Se for token, não adianta tentar as próximas notícias agora.
-                if os.path.exists(temp_img): os.remove(temp_img)
-                if os.path.exists(temp_video): os.remove(temp_video)
+                for f in [temp_reel_img, temp_post_img, temp_video]:
+                    if os.path.exists(f): os.remove(f)
                 
                 # Verificação simplificada de erro de token no log (simulada aqui pelo fluxo)
                 # Em um cenário real, poderíamos checar a resposta da API Meta no publicar_reel
