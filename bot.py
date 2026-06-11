@@ -466,53 +466,51 @@ def adicionar_texto_premium(img_bytes, dados_esteticos):
             img_core.paste(e_img, (ix, iy), e_img)
     except: pass
 
-    # 7. Emojis de Reação (Opinião ao lado direito)
-    if reactions:
-        # Posição: um pouco abaixo do título, dentro do quadrado 1:1
-        react_y = ty2 + int(55 * sf) # Ainda mais para baixo
-        r_emoji_size = int(f_size * 0.51) # +20% de redução (era 0.64)
-        f_react_size = int(badge_h * 0.48) # +20% de redução (era 0.6)
-        f_react = ImageFont.truetype(font_path, f_react_size) if font_path else ImageFont.load_default()
-
-        # Calcular largura total do bloco de reações (Emoji + Espaço + Texto + Gap)
-        gap_entre_blocos = int(35 * sf)
-        espacinho = int(12 * sf)
-        total_w = 0
-        blocos = []
+    # 7. Chamada para Ação (Call to Action - Legenda)
+    cta_y = ty2 + int(60 * sf)
+    f_cta_size = int(badge_h * 0.65)
+    f_cta = ImageFont.truetype(font_path, f_cta_size) if font_path else ImageFont.load_default()
+    
+    cta_text = "VEJA MAIS NA LEGENDA"
+    emoji_hex = "1f447" # 👇
+    
+    draw_core = ImageDraw.Draw(img_core)
+    lbb = draw_core.textbbox((0, 0), cta_text, font=f_cta)
+    lw_text = lbb[2] - lbb[0]
+    
+    r_emoji_size = int(f_cta_size * 1.3)
+    espacinho = int(15 * sf)
+    
+    total_w = r_emoji_size + espacinho + lw_text + espacinho + r_emoji_size
+    rx = (bw - total_w) // 2
+    
+    try:
+        r_url = f"https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/{emoji_hex}.png"
+        r_resp = requests.get(r_url, timeout=10)
         
-        for (r_hex, r_label) in reactions:
-            lbb = draw_core.textbbox((0, 0), r_label, font=f_react)
-            lw_r = lbb[2] - lbb[0]
-            bloco_w = r_emoji_size + espacinho + lw_r
-            blocos.append({"hex": r_hex, "label": r_label, "w": bloco_w, "text_w": lw_r})
-            total_w += bloco_w
-        
-        total_w += gap_entre_blocos * (len(reactions) - 1)
-        rx = (bw - total_w) // 2
-
-        for b in blocos:
-            try:
-                r_url = f"https://raw.githubusercontent.com/iamcal/emoji-data/master/img-facebook-96/{b['hex']}.png"
-                r_resp = requests.get(r_url, timeout=10)
-                if r_resp.status_code != 200:
-                    r_url = f"https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/{b['hex']}.png"
-                    r_resp = requests.get(r_url, timeout=10)
-                
-                if r_resp.status_code == 200:
-                    ri = Image.open(BytesIO(r_resp.content)).convert("RGBA")
-                    ri = ri.resize((r_emoji_size, r_emoji_size), Image.Resampling.LANCZOS)
-                    # Centralizar emoji verticalmente em relação ao texto se necessário, ou usar react_y
-                    img_core.paste(ri, (rx, react_y), ri)
-                    
-                    # Texto ao lado direito (com leve sombra)
-                    tx_pos = rx + r_emoji_size + espacinho
-                    ty_pos = react_y + (r_emoji_size // 2)
-                    draw_core = ImageDraw.Draw(img_core)
-                    draw_core.text((tx_pos + 1*sf, ty_pos + 1*sf), b["label"], font=f_react, fill=(0, 0, 0, 180), anchor="lm")
-                    draw_core.text((tx_pos, ty_pos), b["label"], font=f_react, fill=(255, 255, 255), anchor="lm")
-                    
-                    rx += b["w"] + gap_entre_blocos
-            except: pass
+        if r_resp.status_code == 200:
+            ri = Image.open(BytesIO(r_resp.content)).convert("RGBA")
+            ri = ri.resize((r_emoji_size, r_emoji_size), Image.Resampling.LANCZOS)
+            
+            # Emoji Esquerdo
+            img_core.paste(ri, (rx, cta_y - (r_emoji_size // 4)), ri)
+            
+            # Texto Central
+            tx_pos = rx + r_emoji_size + espacinho
+            ty_pos = cta_y + (r_emoji_size // 4)
+            draw_core.text((tx_pos + 2*sf, ty_pos + 2*sf), cta_text, font=f_cta, fill=(0, 0, 0, 180), anchor="lm")
+            draw_core.text((tx_pos, ty_pos), cta_text, font=f_cta, fill=(255, 255, 255), anchor="lm")
+            
+            # Emoji Direito
+            rx_right = tx_pos + lw_text + espacinho
+            img_core.paste(ri, (rx_right, cta_y - (r_emoji_size // 4)), ri)
+        else:
+            # Fallback sem imagem
+            draw_core.text((bw // 2 + 2*sf, cta_y + 2*sf), f"👇 {cta_text} 👇", font=f_cta, fill=(0, 0, 0, 180), anchor="mt")
+            draw_core.text((bw // 2, cta_y), f"👇 {cta_text} 👇", font=f_cta, fill=(255, 255, 255), anchor="mt")
+    except:
+        draw_core.text((bw // 2 + 2*sf, cta_y + 2*sf), f"👇 {cta_text} 👇", font=f_cta, fill=(0, 0, 0, 180), anchor="mt")
+        draw_core.text((bw // 2, cta_y), f"👇 {cta_text} 👇", font=f_cta, fill=(255, 255, 255), anchor="mt")
 
     # --- ETAPA FINAL: COMPOSIÇÃO COM FUNDO BLURRED 9:16 ---
     # Saída em 2160x3840 (2x da resolução final 1080x1920) para o Ken Burns não perder nitidez
