@@ -364,7 +364,12 @@ def adicionar_texto_premium(img_bytes, dados_esteticos):
     tag_texto = dados_esteticos["tag"]
     emoji_hex = dados_esteticos["emoji"]
 
-    img_orig = Image.open(BytesIO(img_bytes)).convert("RGB")
+    # 0. Limpeza expressa de Metadados (EXIF, ICC, etc)
+    # Ao criar uma nova imagem baseada nos bytes da original, garantimos
+    # que NENHUM metadado (EXIF) seja repassado para a arte final, blindando contra bloqueios do FB.
+    _img_temp = Image.open(BytesIO(img_bytes)).convert("RGB")
+    img_orig = Image.new("RGB", _img_temp.size)
+    img_orig.paste(_img_temp)
     w_orig, h_orig = img_orig.size
     font_path = baixar_fonte()
 
@@ -374,24 +379,47 @@ def adicionar_texto_premium(img_bytes, dados_esteticos):
         base_h = int(1080 / target_ratio)
         bw, bh = base_w * sf, base_h * sf
 
-        # 1. Crop quadrado da imagem original
         img_ratio = w_orig / h_orig
-        if img_ratio > target_ratio:
-            new_w = h_orig * target_ratio
-            new_h = h_orig
-        else:
-            new_w = w_orig
-            new_h = w_orig / target_ratio
 
-        left = (w_orig - new_w) / 2
-        top = (h_orig - new_h) / 2
-        img_cropped = img_orig.crop((left, top, left + new_w, top + new_h))
+        # 1. Fundo Desfocado (Blur Background) para evitar cortes no 16:9
+        if img_ratio > target_ratio:
+            bg_w = int(h_orig * target_ratio)
+            bg_h = h_orig
+        else:
+            bg_w = w_orig
+            bg_h = int(w_orig / target_ratio)
+            
+        bg_left = (w_orig - bg_w) / 2
+        bg_top = (h_orig - bg_h) / 2
+        bg_img = img_orig.crop((bg_left, bg_top, bg_left + bg_w, bg_top + bg_h))
+        bg_img = bg_img.resize((int(bw), int(bh)), Image.Resampling.LANCZOS)
         
-        # 2. Redimensionamento e Melhoria da imagem base
-        img_core = img_cropped.resize((int(bw), int(bh)), Image.Resampling.LANCZOS)
-        img_core = ImageEnhance.Color(img_core).enhance(1.3)
-        img_core = ImageEnhance.Contrast(img_core).enhance(1.1)
-        img_core = ImageEnhance.Sharpness(img_core).enhance(1.4)
+        # Filtro de desfoque e escurecimento do fundo
+        bg_img = bg_img.filter(ImageFilter.GaussianBlur(radius=30 * sf))
+        bg_img = ImageEnhance.Brightness(bg_img).enhance(0.5)
+
+        # 2. Imagem Principal Inteira (Fit no centro) sem perder resolução
+        if img_ratio > target_ratio:
+            fit_w = int(bw)
+            fit_h = int(bw / img_ratio)
+        else:
+            fit_w = int(bh * img_ratio)
+            fit_h = int(bh)
+            
+        fg_img = img_orig.resize((fit_w, fit_h), Image.Resampling.LANCZOS)
+        
+        # Filtros de Qualidade na imagem principal
+        fg_img = ImageEnhance.Color(fg_img).enhance(1.3)
+        fg_img = ImageEnhance.Contrast(fg_img).enhance(1.1)
+        fg_img = ImageEnhance.Sharpness(fg_img).enhance(1.4)
+        fg_img = fg_img.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+
+        # Cola a imagem principal por cima do fundo desfocado
+        fg_x = (int(bw) - fit_w) // 2
+        fg_y = (int(bh) - fit_h) // 2
+        
+        img_core = bg_img.copy()
+        img_core.paste(fg_img, (fg_x, fg_y))
 
         # 3. Gradiente de base (escurecer parte inferior para leitura do título)
         overlay = Image.new("RGBA", (int(bw), int(bh)), (0, 0, 0, 0))
