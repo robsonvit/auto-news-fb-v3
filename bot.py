@@ -276,11 +276,11 @@ def gerar_video_ffmpeg(img_path, audio_path, output_path, duration=20, tts_path=
             # Estrutura de inputs: [0]=imagem, [1]=música, [2]=TTS
             # filter_complex:
             #   [1:a] → música em loop com volume reduzido (0.25x)
-            #   [2:a] → TTS com volume alto (1.5x)
+            #   [2:a] → TTS com velocidade de 1.5x (atempo=1.5) e volume alto (1.5x)
             #   amix das duas faixas, fade de entrada e saída no mix final
             audio_filter_complex = (
                 f"[1:a]aloop=loop=-1:size=2e+09,volume=0.25,atrim=end={duration}[bg];"
-                f"[2:a]volume=1.5[voz];"
+                f"[2:a]atempo=1.5,volume=1.5[voz];"
                 f"[bg][voz]amix=inputs=2:duration=longest,"
                 f"afade=t=in:st=0:d=0.5,afade=t=out:st={max(duration-1,0)}:d=1[aout]"
             )
