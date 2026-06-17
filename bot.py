@@ -22,6 +22,11 @@ import subprocess
 import glob
 from dotenv import load_dotenv
 import difflib
+try:
+    from gtts import gTTS
+    GTTS_DISPONIVEL = True
+except ImportError:
+    GTTS_DISPONIVEL = False
 
 load_dotenv(override=True)
 
@@ -223,11 +228,37 @@ def gerar_gancho(title):
     log.warning("❌ Falha em todas as tentativas do Gemini. Usando título genérico.")
     return default_res
 
-def gerar_video_ffmpeg(img_path, audio_path, output_path, duration=20):
+def gerar_audio_tts(titulo: str, output_path: str) -> bool:
+    """
+    Gera um áudio TTS com o título da notícia + chamada para ação,
+    usando gTTS (Google Text-to-Speech, PT-BR, voz feminina).
+    Retorna True em caso de sucesso.
+    """
+    if not GTTS_DISPONIVEL:
+        log.warning("⚠️ gTTS não instalado — TTS desativado. Rode: pip install gtts")
+        return False
+    try:
+        texto_tts = f"{titulo}. Veja completo no link azul na legenda."
+        log.info(f"🗣️ Gerando TTS: {texto_tts[:80]}...")
+        tts = gTTS(text=texto_tts, lang="pt", slow=False)
+        tts.save(output_path)
+        log.info(f"✅ Áudio TTS salvo: {output_path}")
+        return True
+    except Exception as e:
+        log.error(f"❌ Falha ao gerar TTS: {e}")
+        return False
+
+
+def gerar_video_ffmpeg(img_path, audio_path, output_path, duration=20, tts_path=None):
     """
     Cria um vídeo com movimento real (efeito Ken Burns / zoom suave) a partir de uma
     imagem e um áudio — evitando detecção como 'imagem estática' pelo Facebook.
     Resolução saída: 1080x1920 (9:16), bitrate alto, sem tune stillimage.
+
+    Se tts_path for fornecido, o áudio TTS é mixado em cima da música de fundo:
+      - TTS: volume alto (1.5x) — leitura do título da notícia
+      - Música de fundo: volume baixo (0.25x)
+    Ao final do TTS, toda a trilha recebe o texto de encerramento via áudio.
     """
     log.info(f"🎞️ Gerando vídeo DINÂMICO de {duration}s com Ken Burns...")
     try:
@@ -235,38 +266,75 @@ def gerar_video_ffmpeg(img_path, audio_path, output_path, duration=20):
         total_frames = duration * fps
 
         # Efeito Ken Burns: zoom gradual de 1.0 → 1.08 ao longo de todos os frames
-        # A imagem de entrada já está em 2160x3840 — resolução ideal para o zoom sem artefatos
-        # zoompan trabalha no tamanho original da imagem e escala a saída para 1080x1920
         zoom_filter = (
             f"zoompan=z='min(zoom+0.0003,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d={total_frames}:s=1080x1920:fps={fps}"
         )
 
-        # Fade de áudio: 0.5s no início e 1s no final
-        audio_filter = f"afade=t=in:st=0:d=0.5,afade=t=out:st={max(duration-1,0)}:d=1"
+        if tts_path and os.path.exists(tts_path):
+            # --- MODO COM TTS: mixa música de fundo (baixo volume) + TTS (alto volume) ---
+            # Estrutura de inputs: [0]=imagem, [1]=música, [2]=TTS
+            # filter_complex:
+            #   [1:a] → música em loop com volume reduzido (0.25x)
+            #   [2:a] → TTS com volume alto (1.5x)
+            #   amix das duas faixas, fade de entrada e saída no mix final
+            audio_filter_complex = (
+                f"[1:a]aloop=loop=-1:size=2e+09,volume=0.25,atrim=end={duration}[bg];"
+                f"[2:a]volume=1.5[voz];"
+                f"[bg][voz]amix=inputs=2:duration=longest,"
+                f"afade=t=in:st=0:d=0.5,afade=t=out:st={max(duration-1,0)}:d=1[aout]"
+            )
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-framerate", str(fps),
+                "-i", img_path,           # [0] imagem
+                "-i", audio_path,         # [1] música de fundo
+                "-i", tts_path,           # [2] áudio TTS
+                "-filter_complex", audio_filter_complex,
+                "-map", "0:v",
+                "-map", "[aout]",
+                "-vf", zoom_filter,
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "18",
+                "-profile:v", "high",
+                "-level", "4.0",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "44100",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-t", str(duration),
+                output_path
+            ]
+            log.info("🎙️ Mixando TTS + música de fundo...")
+        else:
+            # --- MODO SEM TTS: somente música de fundo (comportamento original) ---
+            audio_filter = f"afade=t=in:st=0:d=0.5,afade=t=out:st={max(duration-1,0)}:d=1"
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-framerate", str(fps),
+                "-i", img_path,
+                "-stream_loop", "-1",
+                "-i", audio_path,
+                "-vf", zoom_filter,
+                "-af", audio_filter,
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "18",
+                "-profile:v", "high",
+                "-level", "4.0",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "44100",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-t", str(duration),
+                output_path
+            ]
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1",
-            "-framerate", str(fps),
-            "-i", img_path,
-            "-stream_loop", "-1",
-            "-i", audio_path,
-            "-vf", zoom_filter,
-            "-af", audio_filter,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "18",
-            "-profile:v", "high",
-            "-level", "4.0",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-ar", "44100",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            "-t", str(duration),
-            output_path
-        ]
         result = subprocess.run(cmd, check=True, capture_output=True)
         log.info(f"✅ Vídeo dinâmico gerado: {output_path}")
         return True
@@ -802,10 +870,20 @@ def main():
             
             audio_sel = random.choice(audio_files)
             temp_video = "temp_reel.mp4"
+            temp_tts = "temp_tts.mp3"
             # Facebook exige entre 15 e 90s; usamos 20-45s para garantir qualidade
             duracao_random = random.randint(20, 45)
-            
-            if not gerar_video_ffmpeg(temp_reel_img, audio_sel, temp_video, duration=duracao_random):
+
+            # --- Gerar áudio TTS com o título da notícia ---
+            tts_gerado = gerar_audio_tts(n["title"], temp_tts)
+            if not tts_gerado:
+                log.warning("⚠️ TTS falhou — vídeo será gerado somente com música de fundo.")
+                temp_tts = None
+
+            if not gerar_video_ffmpeg(temp_reel_img, audio_sel, temp_video,
+                                      duration=duracao_random, tts_path=temp_tts):
+                if temp_tts and os.path.exists(temp_tts):
+                    os.remove(temp_tts)
                 continue
             
             hashtags = estetica.get("hashtags", "#noticias #brasil").lower()
@@ -840,7 +918,7 @@ def main():
                 save_state(posted_ids, posted_titles)
                 
                 # Limpeza
-                for f in [temp_reel_img, temp_post_img, temp_video]:
+                for f in [temp_reel_img, temp_post_img, temp_video, temp_tts or ""]:
                     if os.path.exists(f): os.remove(f)
                 break
             else:
@@ -849,7 +927,7 @@ def main():
                 # Tentar identificar se o erro foi de TOKEN expirado (OAuthException 190)
                 # O erro costuma vir no log do publicar_reel ou no traceback.
                 # Se for token, não adianta tentar as próximas notícias agora.
-                for f in [temp_reel_img, temp_post_img, temp_video]:
+                for f in [temp_reel_img, temp_post_img, temp_video, temp_tts or ""]:
                     if os.path.exists(f): os.remove(f)
                 
                 # Verificação simplificada de erro de token no log (simulada aqui pelo fluxo)
