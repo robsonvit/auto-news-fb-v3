@@ -26,11 +26,8 @@ jobs:
       - name: 🌐 Instalar Playwright + Chromium
         run: python -m playwright install --with-deps chromium
 
-      - name: Install FFmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          ffmpeg -version
+      - name: 🎥 Verificar FFmpeg (Pré-instalado)
+        run: ffmpeg -version
 
       - name: 🤖 Rodar Bot
         env:
@@ -62,4 +59,3 @@ jobs:
           fi
 
 # Retrigger parsing
-
