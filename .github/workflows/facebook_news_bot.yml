@@ -24,7 +24,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: 🌐 Instalar Playwright + Chromium
-        run: python -m playwright install --with-deps chromium
+        run: python -m playwright install chromium
 
       - name: 🎥 Verificar FFmpeg (Pré-instalado)
         run: ffmpeg -version
