@@ -926,7 +926,7 @@ def main():
             # 🔗VEJA MAIS NO LINK: URL
             
             padding_bottom = "\n.\n.\n.\n"
-            msg = f"😱 {estetica['tag'].upper()}: {misterio}... 😱\n.\n{hashtags}{padding_bottom}🔗VEJA MAIS NO LINK: {n['link']}"
+            msg = f"😱 {estetica['tag'].upper()}: {misterio}... 😱\n.\n{hashtags}{padding_bottom}👇 O link da notícia completa está no primeiro comentário 👇"
             
             video_id = publicar_reel(FB_PAGE_ID, FB_TOKEN, temp_video, msg)
             
