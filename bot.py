@@ -426,6 +426,33 @@ def publicar_imagem(page_id, token, img_path, message):
         log.error(f"Erro no processo de publicação de imagem: {e}")
         return None
 
+
+def comentar_no_post(object_id, token, link_noticia):
+    """
+    Posta o link da notícia como primeiro comentário em uma publicação.
+    Funciona para Reels (video_id) e Fotos (post_id).
+    Requer a permissão: pages_manage_engagement
+    """
+    if not object_id or not link_noticia:
+        log.warning("⚠️ comentar_no_post: object_id ou link_noticia ausente. Comentário ignorado.")
+        return None
+    try:
+        url = f"https://graph.facebook.com/v22.0/{object_id}/comments"
+        payload = {
+            "message": f"🔗 Leia a notícia completa aqui: {link_noticia}",
+            "access_token": token
+        }
+        res = requests.post(url, data=payload, timeout=30).json()
+        if res.get("id"):
+            log.info(f"💬 Comentário com link postado! ID: {res['id']} → {link_noticia[:70]}")
+            return res["id"]
+        else:
+            log.warning(f"⚠️ Não foi possível postar comentário: {res}")
+            return None
+    except Exception as e:
+        log.error(f"❌ Erro ao postar comentário: {e}")
+        return None
+
 def adicionar_texto_premium(img_bytes, dados_esteticos):
     MAIN_COLOR = dados_esteticos["color"]
     texto = dados_esteticos["hook"]
@@ -906,11 +933,17 @@ def main():
             if video_id:
                 log.info(f"🔗 LINK REEL: https://www.facebook.com/reels/{video_id}/")
                 
-                # --- NOVO: Postar a imagem logo após o Reel ---
+                # --- Postar comentário com link da notícia no Reel ---
+                time.sleep(5)  # Aguarda o Facebook processar o Reel antes de comentar
+                comentar_no_post(video_id, FB_TOKEN, n["link"])
+                
+                # --- Postar a imagem logo após o Reel ---
                 img_post_id = publicar_imagem(FB_PAGE_ID, FB_TOKEN, temp_post_img, msg)
                 if img_post_id:
-                    # O ID retornado geralmente é PostID ou PhotoID. Apenas reportamos sucesso.
                     log.info(f"📸 Sucesso! A imagem também foi postada.")
+                    # --- Postar comentário com link da notícia na Imagem ---
+                    time.sleep(3)  # Aguarda o Facebook processar a imagem
+                    comentar_no_post(img_post_id, FB_TOKEN, n["link"])
                 
                 # Registra o ID e o título normalizado para deduplicação futura
                 posted_ids.add(n["id"])
