@@ -980,6 +980,9 @@ def main():
             padding_bottom = "\n.\n.\n.\n"
             msg = f"😱 {estetica['tag'].upper()}: {misterio}... 😱\n.\n{hashtags}{padding_bottom}👇 O link da notícia completa está no primeiro comentário 👇"
             
+            # Legenda específica para imagem: curta, sem hashtags, finalizando em "Ver mais..."
+            msg_img = f"😱 {estetica['tag'].upper()}: {misterio}... Ver mais..."
+            
             video_id = publicar_reel(FB_PAGE_ID, FB_TOKEN, temp_video, msg)
             
             if video_id:
@@ -994,7 +997,7 @@ def main():
                 publicar_story_video(FB_PAGE_ID, FB_TOKEN, temp_video)
                 
                 # --- Postar a imagem logo após o Reel ---
-                img_post_id = publicar_imagem(FB_PAGE_ID, FB_TOKEN, temp_post_img, msg)
+                img_post_id = publicar_imagem(FB_PAGE_ID, FB_TOKEN, temp_post_img, msg_img)
                 if img_post_id:
                     log.info(f"📸 Sucesso! A imagem também foi postada.")
                     # --- Postar comentário com link da notícia na Imagem ---
