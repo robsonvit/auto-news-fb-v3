@@ -26,8 +26,8 @@ jobs:
       - name: 🌐 Instalar Playwright + Chromium
         run: python -m playwright install chromium
 
-      - name: 🎥 Verificar FFmpeg (Pré-instalado)
-        run: ffmpeg -version
+      - name: 🎥 Instalar FFmpeg (Rápido)
+        uses: FedericoCarboni/setup-ffmpeg@v3
 
       - name: 🤖 Rodar Bot
         env:
