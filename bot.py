@@ -238,7 +238,7 @@ def gerar_audio_tts(titulo: str, output_path: str) -> bool:
         log.warning("⚠️ gTTS não instalado — TTS desativado. Rode: pip install gtts")
         return False
     try:
-        texto_tts = f"{titulo}. Veja completo no link azul na legenda."
+        texto_tts = f"{titulo}. Veja completo no link azul na legenda. Para se manter informado, clique no joinha e no seguir."
         log.info(f"🗣️ Gerando TTS: {texto_tts[:80]}...")
         tts = gTTS(text=texto_tts, lang="pt", slow=False)
         tts.save(output_path)
